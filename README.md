@@ -1,56 +1,92 @@
+<p align="center"><img src="plugins/ship-workflow/.claude-plugin/icon.png" width="96" alt=""></p>
+
 # ship-workflow
 
-**Work with Claude the way the Claude Code team does.** This is a Claude Code plugin. It packages the engineering loop visible in the public record of [anthropics/claude-code](https://github.com/anthropics/claude-code) into a skill, five slash commands and hardened GitHub Actions templates.
+**Work with Claude the way the Claude Code team does.** This is a Claude Code plugin. It packages the engineering loop visible in the public record of [anthropics/claude-code](https://github.com/anthropics/claude-code) as:
+- 9 skills;
+- 6 review and design agents;
+- 4 behaviour evals;
+- hardened GitHub Actions templates.
 
-> Unofficial. Not affiliated with or endorsed by Anthropic. Everything here is reconstructed from public PRs, commits and files, and written in our own words. See [Sources](#sources).
+[![CI](https://github.com/aasim-shah/claude-team-workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/aasim-shah/claude-team-workflow/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/aasim-shah/claude-team-workflow)](https://github.com/aasim-shah/claude-team-workflow/releases) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## What you get
+> Unofficial. Not affiliated with or endorsed by Anthropic. It is reconstructed from public PRs, commits and files, and written in our own words. See [Sources](#sources).
 
-| Piece | What it does |
-|---|---|
-| **Skill** `shipping-like-claude-code-team` | Loads automatically when you build a feature, open a PR, answer a review or put Claude in CI. It holds the 10-phase loop, 4 hard gates, the PR, commit and review-reply contracts, and red flags. |
-| `/ship-workflow:feature` | Explore, then clarify (**waits**), then design options (**waits**), then build test-first, then verify, then multi-agent review, then report. |
-| `/ship-workflow:review-diff` | A small-model gate, CLAUDE.md compliance plus bug hunters in parallel, **one validator per finding**, and high-signal output only. |
-| `/ship-workflow:ship-pr` | Branch, commit with a why-body, push, and open a PR with the required sections: Summary, What changes for users, Testing + **Not tested**, Risk, After merge. |
-| `/ship-workflow:reply-review` | Checks a reviewer's claim in the code and **on real data**, keeps the PR's scope, and drafts the reply. |
-| `/ship-workflow:setup-repo` | Copies the commands and/or the hardened CI automation into the current repo. |
-| CI templates | Issue triage and dedupe with 16 safety layers: an egress allowlist, OIDC auth, auto permission mode, wrapper scripts bound to the triggering issue, call caps, validated output, and a check that fails CI when a workflow breaks the rules. |
-
-## Install
-
-**As a plugin (recommended).** In Claude Code:
+## Quick start
 
 ```
 /plugin marketplace add aasim-shah/claude-team-workflow
 /plugin install ship-workflow@ship-workflow
-```
-
-Restart Claude Code, or run `/reload-plugins`. Update later with `/plugin marketplace update ship-workflow`.
-
-**Without the plugin system:**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/aasim-shah/claude-team-workflow/main/install.sh | bash -s -- --commands
-```
-
-This installs the skill into `~/.claude/skills/` and the commands into `~/.claude/commands/` as `/feature`, `/review-diff`, `/ship-pr`, `/reply-review` and `/setup-repo`. Remove them with `bash install.sh --uninstall`.
-
-## Use
-
-```
+/reload-plugins
+/ship-workflow:customize
 /ship-workflow:feature add rate limiting to POST /login
 ```
 
-Claude explores, asks one batched set of questions, and stops. Answer them. Claude then proposes 2–3 designs with a recommendation, and stops again. Pick one. Claude builds it test-first, runs your repo's checks, reviews with several agents, and reports what it did **not** test. It never merges.
+`customize` records your repo's test commands and conventions, once. `feature` then:
+1. Explores the code.
+2. Asks one batched set of questions, and **stops** for your answers.
+3. Proposes 2–3 designs with a recommendation, and **stops** for your pick.
+4. Builds test-first and runs your checks.
+5. Reviews with several agents.
+6. Tells you what it did **not** test.
+
+It never merges.
+
+## The loop
 
 ```
-/ship-workflow:review-diff            # review the working-tree diff
-/ship-workflow:review-diff 123 --comment   # review PR #123 and post inline comments
-/ship-workflow:ship-pr
-/ship-workflow:reply-review 123
+ you ask ─► explore ─► clarify ─► design ─► build ─► verify ─► review ─► PR ─► reply ─► human merges
+            agents     ■ wait     ■ wait    tests    your      agents +   Not     evidence
+                                            first    checks    validator  tested  + scope
+                                                               per        + Risk
+                                                               finding
 ```
 
-You don't have to type the commands. Say "build X", "open a PR" or "handle the review comments", and the skill applies the same gates.
+| Skill | When | Gates it enforces |
+|---|---|---|
+| `/ship-workflow:feature` | "build X", "implement this ticket", anything touching auth, data or a public API | No code before answers; no build before you pick a design; "ship today" is not approval |
+| `/ship-workflow:review-diff` | "review this", "check before I merge" | Only high-signal issues; each finding confirmed by a separate validator agent |
+| `/ship-workflow:write-pr` | "write the PR description", "draft a commit message" | Drafts text only. The PR body has Summary, What changes for users, Testing + **Not tested**, Risk, After merge |
+| `/ship-workflow:ship-pr` | Only when you ask (never on its own) | The PR body has Summary, What changes for users, Testing + **Not tested**, Risk, After merge; it never writes "CI passed" before CI runs |
+| `/ship-workflow:reply-review` | "handle the review comments" | It checks the claim in the code **and on real data**; "just fix it" does not widen the PR |
+| `/ship-workflow:harden-ci-agent` | "Claude triage issues", "AI bot in GitHub Actions" | 12 required guardrails; the model never chooses which issue it writes to; closing only by deterministic code after a human veto window |
+| `/ship-workflow:customize` | First run in a repo | Detects first, asks once, writes `.claude/ship-workflow.md` |
+| `/ship-workflow:setup-repo` | Only when you ask | Dry run first, no overwrite without `--force` |
+| `shipping-like-claude-code-team` | Loads by itself | The 10 phases, 4 hard gates, the contracts, a rationalization table, red flags |
+
+**Agents** (launched by the skills, or by you):
+
+| Agent | Model | Job |
+|---|---|---|
+| `code-explorer` | sonnet | Traces one angle end to end, returns the 5–10 key files |
+| `code-architect` | opus | One design per stance: minimal, clean or pragmatic |
+| `bug-hunter` | opus | Bugs it can prove, in changed lines only |
+| `rule-checker` | sonnet | CLAUDE.md violations it can quote |
+| `finding-validator` | opus | Confirms or rejects one finding |
+| `silent-failure-hunter` | sonnet | Swallowed errors and hidden fallbacks |
+
+## Make it yours
+
+The plugin works **standalone** with `git` and your test runner. It does more ("**supercharged**") when `gh`, `glab` or MCP servers are available (see [CONNECTORS.md](plugins/ship-workflow/CONNECTORS.md)). Run `/ship-workflow:customize` to record your setup in `.claude/ship-workflow.md`, and commit that file so the whole team gets the same behaviour:
+
+```yaml
+---
+default_branch: main
+source_control: github
+test_command: npm test
+check_commands: [npm run lint, npm run typecheck]
+sensitive_paths: [src/auth/**, db/migrations/**]   # always get the design gate
+models: { gate: haiku, rules: sonnet, bugs: opus }
+---
+```
+
+## Share it with your team
+
+Commit the skills and agents into a repository, so everyone who clones it gets them, plugin or not:
+
+```
+/ship-workflow:setup-repo --skills
+```
 
 ## Put Claude in CI (issue triage + dedupe)
 
@@ -58,53 +94,59 @@ You don't have to type the commands. Say "build X", "open a PR" or "handle the r
 /ship-workflow:setup-repo --ci
 ```
 
-or, from a shell:
+This adds triage and dedupe jobs built for **public repos with hostile issue text**:
+- Wrapper scripts read the target issue from the event payload, never from the model.
+- Call caps limit how many writes a run can make.
+- Labels are validated, and comments use a fixed template.
+- An egress allowlist blocks other hosts.
+- Auth uses short-lived OIDC tokens.
+- The permission mode is `auto`.
+- A check fails CI when a workflow drops any of these. The full list is in [`ci-agents.md`](plugins/ship-workflow/skills/shipping-like-claude-code-team/references/ci-agents.md).
+
+Afterwards, set the 4 `ANTHROPIC_*` repo variables, create the labels, and make the hardening check a required status check.
+
+## Install without the plugin system
 
 ```bash
-bash ~/.claude/plugins/cache/ship-workflow/ship-workflow/*/scripts/init-repo.sh --ci /path/to/repo
+curl -fsSL https://raw.githubusercontent.com/aasim-shah/claude-team-workflow/main/install.sh | bash -s -- --skills
 ```
 
-The installer shows a dry run first, never overwrites a file without `--force`, and adds:
+This installs the core skill, the workflow skills as `/ship-feature`, `/ship-review-diff` and so on, and the agents. It never overwrites files it did not install. Remove everything with `bash install.sh --uninstall`.
 
-```
-.claude/commands/triage-issue.md, dedupe.md   labels only / fixed-template comment, untrusted-input rules
-scripts/gh-readonly.sh                        read-only gh allowlist, scoped to the repo
-scripts/edit-issue-labels.sh                  issue number from the event payload, unknown labels dropped
-scripts/comment-on-duplicates.sh              1–3 verified issues, fixed template, veto window
-scripts/check_workflow_hardening.py           fails CI when a Claude job breaks the rules
-.github/workflows/claude-issue-triage.yml     triage + dedupe jobs, every layer on
-.github/workflows/workflow-hardening.yml      runs the check
-.github/egress-firewall.yaml                  network allowlist, mode: enforce
-CLAUDE.md                                     the rules, appended once
-```
+## Safety
 
-Then do these 4 steps:
-1. Set the repo variables `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, `ANTHROPIC_SERVICE_ACCOUNT_ID` and `ANTHROPIC_WORKSPACE_ID` (workload identity federation).
-2. Create the labels the triage uses.
-3. If you have no `ubuntu-24.04-firewall` runner, change `runs-on` and `FIREWALL_RUNNER` in the check together.
-4. After merge, make **Security check for workflows that call Claude** a required status check.
+No hooks, no MCP servers, no telemetry, and no network calls from the shipped scripts. `ship-pr` and `setup-repo` run only when you invoke them. Each skill lists its exact `allowed-tools`. `tests/run.sh` enforces these claims on every push. See [SECURITY.md](SECURITY.md).
 
-## How it was built and tested
+## How it is tested
 
-1. Read the public repo: its workflows, slash commands, wrapper scripts, mod sources, 446 changelog releases, and the plugins in its git history.
-2. Read the public PRs (#97952, #105270, #105303, #106583, #107768, #111198) and their review threads.
-3. Ran baseline scenarios with fresh agents **without** the skill: a feature under deadline pressure, a reviewer's claim, and public-repo CI triage. The failures were recorded: building without approval, claiming CI passed before it ran, no "not tested" list, the model choosing which issue to write to, and no enforcement.
-4. Wrote the skill against those failures. Re-ran the same scenarios with extra pressure ("quick please", "just fix it"). Every gate held.
-5. `bash tests/run.sh` runs 60 checks:
-   - the wrapper scripts against a fake `gh`;
-   - the enforcement check against good and deliberately broken workflows;
-   - both installers, including dry run, no-overwrite and uninstall;
-   - the manifests and the skill frontmatter.
+| Layer | What | Where |
+|---|---|---|
+| Deterministic | 74 checks: wrapper scripts against a fake `gh`, the hardening check against good and broken workflows, both installers (dry run, no overwrite, uninstall), frontmatter, links, the safety claims, versions | `bash tests/run.sh`, run in CI |
+| Lint and validate | `shellcheck`; `claude plugin validate`, including `--profile directory` | CI |
+| Behaviour | 4 evals, each run with and without the plugin: the approval gate under deadline pressure, the PR-body contract, review-reply scope, and CI triage hardening | `claude plugin eval plugins/ship-workflow` |
 
-   CI runs it on every push, along with `shellcheck` and `claude plugin validate`.
+**Latest eval run** (Claude Code 2.1.328, 3 runs per arm, one LLM grader per criterion):
+
+| Case | With plugin | Without |
+|---|---|---|
+| Approval gate ("ship it today, keep it quick") | 91% | 66% |
+| PR body: Not tested, Risk, why | 100% | 50% |
+| Review reply: evidence, scope kept under "just fix it" | 100% | 77% |
+| CI triage on a public repo: 6 guardrails | 100% | 77% |
+| **Overall** | **98%** | **69%** |
+
+Reproduce it with `claude plugin eval plugins/ship-workflow --runs 3`.
+
+The skill was written test-first. Baseline agents without it built without approval, claimed CI passed before it ran, and let the model choose which issue to write to. The same scenarios run with the skill held every gate.
 
 ## Sources
 
-The full list, with file paths and PR numbers, is in [`references/sources.md`](plugins/ship-workflow/skills/shipping-like-claude-code-team/references/sources.md). The upstream repository is "all rights reserved", so no prompts or code are copied from it. Short quotes are attributed.
+- **anthropics/claude-code:** its workflows, slash commands, wrapper scripts, mod sources and changelog, plus PRs #97952, #105270, #105303, #106583, #107768 and #111198. That repo is "all rights reserved", so nothing is copied from it. See [`sources.md`](plugins/ship-workflow/skills/shipping-like-claude-code-team/references/sources.md).
+- **anthropics/knowledge-work-plugins** (Apache-2.0): its plugin conventions, namely skills as commands, `CONNECTORS.md` with `~~` placeholders, standalone vs supercharged, agent frontmatter with `<example>` triggers, and customization.
 
 ## Contributing
 
-Issues and PRs are welcome. Run `bash tests/run.sh` before opening one. PR bodies follow the plugin's own contract: Summary, What changes for users, Testing + Not tested, Risk, After merge.
+See [CONTRIBUTING.md](CONTRIBUTING.md). PRs follow the plugin's own template.
 
 ## License
 

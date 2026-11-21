@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security issue
+    url: https://github.com/aasim-shah/claude-team-workflow/security/advisories/new
+    about: Report privately. Please do not open a public issue.
+  - name: Claude Code itself
+    url: https://github.com/anthropics/claude-code/issues
+    about: Bugs in Claude Code (not this plugin) go to Anthropic's tracker.

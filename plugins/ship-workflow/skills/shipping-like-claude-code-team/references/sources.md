@@ -28,4 +28,13 @@ The actual chat transcripts are private: the session links need the owner's logi
 - Last 200 commits: 184 bots, 11 authored by Claude, and the rest by humans, most of them co-authored with Claude.
 - 446 releases in the changelog. About 20 in the 30 days to 2026-11-20. About 23 bullets per release. "Fixed" bullets outnumber "Added" about 6:1.
 
+## Plugin conventions
+
+The plugin's packaging follows anthropics/knowledge-work-plugins (Apache-2.0):
+- skills that double as slash commands (`argument-hint`, `$ARGUMENTS`);
+- `CONNECTORS.md` with `~~category` placeholders;
+- the standalone and supercharged modes;
+- agent frontmatter with `<example>` triggers, `model`, `color` and `tools`;
+- a customize step that records each organization's tools.
+
 The repo's license is "all rights reserved". This skill paraphrases; quotes are short and attributed. Read the originals at the paths above.
