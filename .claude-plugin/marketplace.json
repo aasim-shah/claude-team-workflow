@@ -6,16 +6,24 @@
   },
   "metadata": {
     "description": "Work with Claude the way the Claude Code team does.",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "plugins": [
     {
       "name": "ship-workflow",
       "source": "./plugins/ship-workflow",
-      "description": "Approval-gated feature loop, PR/commit/review-reply contracts, multi-agent review, and hardened Claude-in-CI templates.",
-      "version": "1.0.0",
+      "description": "Work with Claude the way the Claude Code team does: approval-gated feature loop, evidence-backed PRs and review replies, multi-agent review with a validator per finding, and hardened Claude-in-CI templates.",
+      "version": "1.1.0",
       "category": "development",
-      "keywords": ["workflow", "code-review", "pull-request", "github-actions"]
+      "keywords": [
+        "workflow",
+        "code-review",
+        "pull-request",
+        "github-actions"
+      ],
+      "displayName": "Ship Workflow",
+      "homepage": "https://github.com/aasim-shah/claude-team-workflow",
+      "license": "MIT"
     }
   ]
 }

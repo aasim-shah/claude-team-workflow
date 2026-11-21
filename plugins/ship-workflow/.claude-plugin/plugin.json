@@ -1,6 +1,6 @@
 {
   "name": "ship-workflow",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "The AI-first engineering loop reconstructed from the public record of Anthropic's Claude Code repo: approval gates, evidence-backed PRs and review replies, multi-agent review with per-finding validation, and hardened Claude-in-CI automation.",
   "author": {
     "name": "aasim-shah",
@@ -9,5 +9,14 @@
   "homepage": "https://github.com/aasim-shah/claude-team-workflow",
   "repository": "https://github.com/aasim-shah/claude-team-workflow",
   "license": "MIT",
-  "keywords": ["workflow", "code-review", "pull-request", "github-actions", "multi-agent", "security"]
+  "keywords": [
+    "workflow",
+    "code-review",
+    "pull-request",
+    "github-actions",
+    "multi-agent",
+    "agents",
+    "evals",
+    "security"
+  ]
 }

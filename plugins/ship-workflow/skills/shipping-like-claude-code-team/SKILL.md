@@ -1,6 +1,6 @@
 ---
 name: shipping-like-claude-code-team
-description: Use when building a feature, fixing a bug, writing commits or a PR, answering PR review comments, running a multi-agent review, or wiring Claude into GitHub Actions or issue automation, and the user wants to work the way Anthropic's Claude Code engineers work with Claude, or asks how the Claude Code team uses AI.
+description: Use when building a feature, fixing a bug, writing a commit message or PR description, answering PR review comments, reviewing a diff, or putting Claude or any LLM agent into GitHub Actions or issue automation. Holds the approval gates, the PR, commit and review-reply contracts, and the CI-agent hardening layers used by the Claude Code team.
 ---
 
 # Shipping like the Claude Code team
@@ -108,4 +108,15 @@ Prompt rules alone failed the baseline test. Every layer in `references/ci-agent
 - `references/prompt-patterns.md`: how they write slash commands, agent prompts and `@claude` test prompts.
 - `references/code-and-tests.md`: code shape built for agents, and the test discipline.
 - `references/sources.md`: the evidence (PR numbers, files, commits).
-- `templates/`: slash commands, wrapper scripts, the enforcement check (`scripts/check_workflow_hardening.py` + `workflows/workflow-hardening.yml`), workflows and a CLAUDE.md snippet, ready to copy into a repo. See `templates/README.md`.
+- `templates/`: the CI automation (triage and dedupe commands, wrapper scripts, the enforcement check, workflows, an egress allowlist, and a CLAUDE.md snippet). See `templates/README.md`.
+
+## Companion skills and agents (same plugin)
+
+| Phase | Skill | Agents it launches |
+|---|---|---|
+| 2–7 | `feature` | `code-explorer`, `code-architect`, then `review-diff` |
+| 7 | `review-diff` | `bug-hunter`, `rule-checker`, `silent-failure-hunter`, `finding-validator` |
+| 8 | `write-pr` (drafts the commit and PR text); `ship-pr` (user-invoked only: commit, push, open the PR) | — |
+| 9 | `reply-review` | — |
+| CI | `harden-ci-agent` designs or reviews any CI job that runs an LLM | — |
+| setup | `customize` writes `.claude/ship-workflow.md`; `setup-repo` (user-invoked only) copies files into a repo | — |

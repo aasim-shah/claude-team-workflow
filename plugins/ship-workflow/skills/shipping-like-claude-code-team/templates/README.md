@@ -15,7 +15,7 @@ CI and repository templates. Copy them with the installer (below) rather than by
 | `workflows/egress-firewall.yaml` | `.github/egress-firewall.yaml` | The network allowlist |
 | `CLAUDE-md-snippet.md` | append to `CLAUDE.md` | The rules the enforcement check backs |
 
-The dev commands (`feature`, `review-diff`, `ship-pr`, `reply-review`, `setup-repo`) live in the plugin's `commands/` folder.
+The workflow skills (`feature`, `review-diff`, `ship-pr`, `reply-review`, `customize`, `setup-repo`) live in the plugin's `skills/` folder, and the review agents live in `agents/`.
 
 Install everything into a repo with the bundled installer:
 

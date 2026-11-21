@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Copy ship-workflow files into a repository.
+# Copy ship-workflow files into a repository, so everyone who clones it gets them.
 #
-#   init-repo.sh [--commands] [--ci] [--all] [--force] [--dry-run] [TARGET_DIR]
+#   init-repo.sh [--skills] [--ci] [--all] [--force] [--dry-run] [TARGET_DIR]
 #
-#   --commands  dev slash commands into .claude/commands/ (feature, review-diff, ship-pr, reply-review)
+#   --skills    workflow skills into .claude/skills/ (feature, review-diff, write-pr, ship-pr,
+#               reply-review, customize) and review agents into .claude/agents/   (--commands is an alias)
 #   --ci        hardened issue triage + dedupe for GitHub Actions, wrapper scripts, the enforcement
 #               check, the egress allowlist, and the CLAUDE.md rules
-#   --all       both (default when neither --commands nor --ci is given: --commands)
+#   --all       both (default when neither is given: --skills)
 #   --force     overwrite files that already exist (default: skip them)
 #   --dry-run   print what would happen, change nothing
 #   TARGET_DIR  repository root (default: current directory)
@@ -14,34 +15,29 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-# Works from the plugin layout (plugin/scripts/) and from the skill layout made by install.sh (skill/bin/).
-if [[ -d "$PLUGIN_DIR/skills/shipping-like-claude-code-team/templates" ]]; then
-  TEMPLATES="$PLUGIN_DIR/skills/shipping-like-claude-code-team/templates"
-else
-  TEMPLATES="$PLUGIN_DIR/templates"
-fi
-COMMANDS="$PLUGIN_DIR/commands"
+TEMPLATES="$PLUGIN_DIR/skills/shipping-like-claude-code-team/templates"
+SKILLS="feature review-diff write-pr ship-pr reply-review customize harden-ci-agent"
 MARKER="## Workflows that call Claude"
 
-want_commands=false want_ci=false force=false dry=false target="."
+want_skills=false want_ci=false force=false dry=false target="."
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --commands) want_commands=true ;;
+    --skills|--commands) want_skills=true ;;
     --ci) want_ci=true ;;
-    --all) want_commands=true; want_ci=true ;;
+    --all) want_skills=true; want_ci=true ;;
     --force) force=true ;;
     --dry-run) dry=true ;;
-    -h|--help) sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "Unknown option: $1 (see --help)" >&2; exit 2 ;;
     *) target="$1" ;;
   esac
   shift
 done
-$want_commands || $want_ci || want_commands=true
+$want_skills || $want_ci || want_skills=true
 
 [[ -d "$target" ]] || { echo "Error: $target is not a directory" >&2; exit 1; }
 target="$(cd "$target" && pwd)"
-[[ -d "$TEMPLATES" && -d "$COMMANDS" ]] || { echo "Error: plugin files not found next to $SCRIPT_DIR" >&2; exit 1; }
+[[ -d "$TEMPLATES" && -d "$PLUGIN_DIR/agents" ]] || { echo "Error: plugin files not found under $PLUGIN_DIR" >&2; exit 1; }
 git -C "$target" rev-parse --is-inside-work-tree >/dev/null 2>&1 || echo "Note: $target is not a git repository."
 
 copied=0 skipped=0
@@ -60,10 +56,14 @@ put() { # put SRC DEST_RELATIVE [mode]
 }
 
 echo "Target: $target"
-if $want_commands; then
-  echo "Dev commands:"
-  for f in feature review-diff ship-pr reply-review; do
-    put "$COMMANDS/$f.md" ".claude/commands/$f.md"
+if $want_skills; then
+  echo "Workflow skills and agents:"
+  for s in $SKILLS; do
+    put "$PLUGIN_DIR/skills/$s/SKILL.md" ".claude/skills/$s/SKILL.md"
+  done
+  put "$PLUGIN_DIR/CONNECTORS.md" ".claude/CONNECTORS.md"
+  for a in "$PLUGIN_DIR"/agents/*.md; do
+    put "$a" ".claude/agents/$(basename "$a")"
   done
 fi
 
@@ -93,6 +93,10 @@ fi
 echo
 $dry && echo "Dry run: nothing changed."
 echo "Done: $copied written, $skipped skipped."
+if $want_skills; then
+  echo
+  echo "Next: run /customize in Claude Code to record this repo's test commands and conventions."
+fi
 if $want_ci; then
   cat <<'EOF'
 

@@ -98,8 +98,9 @@ I="$PLUGIN/scripts/init-repo.sh"
 mkdir -p "$WORK/repo" && git -C "$WORK/repo" init -q
 expect_out  "dry run changes nothing"      "Dry run"                    bash "$I" --all --dry-run "$WORK/repo"
 [[ -z "$(find "$WORK/repo" -mindepth 1 -maxdepth 1 ! -name .git)" ]] && ok "dry run left repo empty" || bad "dry run wrote files"
-expect_ok   "default installs commands"                                  bash "$I" "$WORK/repo"
-[[ -f "$WORK/repo/.claude/commands/feature.md" && ! -e "$WORK/repo/scripts" ]] && ok "commands only by default" || bad "default install layout"
+expect_ok   "default installs skills"                                    bash "$I" "$WORK/repo"
+[[ -f "$WORK/repo/.claude/skills/feature/SKILL.md" && -f "$WORK/repo/.claude/agents/finding-validator.md" && -f "$WORK/repo/.claude/CONNECTORS.md" && ! -e "$WORK/repo/scripts" ]] && ok "skills + agents only by default" || bad "default install layout"
+expect_ok   "--commands alias still works"                               bash "$I" --commands --dry-run "$WORK/repo"
 expect_ok   "--ci installs CI"                                           bash "$I" --ci "$WORK/repo"
 for f in .claude/commands/triage-issue.md scripts/gh-readonly.sh .github/workflows/claude-issue-triage.yml .github/egress-firewall.yaml CLAUDE.md; do
   [[ -e "$WORK/repo/$f" ]] && ok "wrote $f" || bad "missing $f"
@@ -114,31 +115,73 @@ expect_fail "bad option refused"                                         bash "$
 
 echo "install.sh"
 H="$WORK/home"
-expect_ok   "installs skill"                                             env CLAUDE_CONFIG_DIR="$H" bash "$ROOT/install.sh" --commands
-[[ -f "$H/skills/shipping-like-claude-code-team/SKILL.md" ]] && ok "skill in place" || bad "skill missing"
-[[ -f "$H/commands/review-diff.md" ]] && ok "commands in place" || bad "commands missing"
-expect_out  "bundled init-repo works"      "Done:"                      bash "$H/skills/shipping-like-claude-code-team/bin/init-repo.sh" --dry-run --all "$WORK/repo"
+mkdir -p "$H/agents" && echo "mine" > "$H/agents/bug-hunter.md"
+expect_ok   "installs"                                                   env CLAUDE_CONFIG_DIR="$H" bash "$ROOT/install.sh" --skills
+[[ -f "$H/skills/shipping-like-claude-code-team/SKILL.md" ]] && ok "core skill in place" || bad "core skill missing"
+grep -q '^name: ship-feature$' "$H/skills/ship-feature/SKILL.md" 2>/dev/null && ok "workflow skill prefixed (ship-feature)" || bad "ship-feature missing or not renamed"
+grep -q "$H/ship-workflow/scripts/init-repo.sh" "$H/skills/ship-setup-repo/SKILL.md" && ok "setup-repo points at installed copy" || bad "setup-repo path not rewritten"
+[[ -f "$H/agents/finding-validator.md" ]] && ok "agents in place" || bad "agents missing"
+[[ "$(cat "$H/agents/bug-hunter.md")" == "mine" ]] && ok "user's own agent not overwritten" || bad "overwrote user's agent"
+expect_out  "installed init-repo works"    "Done:"                      bash "$H/ship-workflow/scripts/init-repo.sh" --dry-run --all "$WORK/repo"
+expect_ok   "reinstall is idempotent"                                    env CLAUDE_CONFIG_DIR="$H" bash "$ROOT/install.sh" --skills
 expect_ok   "uninstall"                                                  env CLAUDE_CONFIG_DIR="$H" bash "$ROOT/install.sh" --uninstall
-[[ ! -e "$H/skills/shipping-like-claude-code-team" && ! -e "$H/commands/review-diff.md" ]] && ok "uninstall removed files" || bad "uninstall left files"
+[[ ! -e "$H/skills/shipping-like-claude-code-team" && ! -e "$H/skills/ship-feature" && ! -e "$H/agents/finding-validator.md" && ! -e "$H/ship-workflow" ]] && ok "uninstall removed our files" || bad "uninstall left files"
+[[ -f "$H/agents/bug-hunter.md" ]] && ok "uninstall kept user's agent" || bad "uninstall removed user's agent"
 
-echo "manifests and skill"
+echo "manifests, skills, agents, evals"
 for j in "$ROOT/.claude-plugin/marketplace.json" "$PLUGIN/.claude-plugin/plugin.json"; do
-  expect_ok "valid JSON: ${j#$ROOT/}" jq -e . "$j"
+  expect_ok "valid JSON: ${j#"$ROOT"/}" jq -e . "$j"
 done
-v1=$(jq -r .version "$PLUGIN/.claude-plugin/plugin.json"); v2=$(jq -r '.plugins[0].version' "$ROOT/.claude-plugin/marketplace.json")
-[[ "$v1" == "$v2" ]] && ok "versions match ($v1)" || bad "plugin $v1 != marketplace $v2"
-head -1 "$SKILL/SKILL.md" | grep -q '^---$' && grep -q '^name: shipping-like-claude-code-team$' "$SKILL/SKILL.md" && grep -q '^description: Use when' "$SKILL/SKILL.md" && ok "skill frontmatter" || bad "skill frontmatter"
-desc_len=$(sed -n 's/^description: //p' "$SKILL/SKILL.md" | wc -c | tr -d ' ')
-[[ "$desc_len" -le 1024 ]] && ok "description ≤ 1024 chars ($desc_len)" || bad "description too long ($desc_len)"
+v1=$(jq -r .version "$PLUGIN/.claude-plugin/plugin.json"); v2=$(jq -r '.plugins[0].version' "$ROOT/.claude-plugin/marketplace.json"); v3=$(jq -r '.metadata.version' "$ROOT/.claude-plugin/marketplace.json")
+[[ "$v1" == "$v2" && "$v1" == "$v3" ]] && ok "versions match ($v1)" || bad "versions differ: plugin $v1, entry $v2, metadata $v3"
+grep -q "^## $v1\$" "$ROOT/CHANGELOG.md" && ok "CHANGELOG has $v1" || bad "CHANGELOG lacks ## $v1"
+if python3 -c 'import yaml' 2>/dev/null; then
+  expect_ok "skill + agent frontmatter" python3 -I - "$PLUGIN" <<'PY'
+import pathlib, sys, yaml
+root = pathlib.Path(sys.argv[1]); errs = []
+def fm(p):
+    t = p.read_text(encoding="utf-8")
+    assert t.startswith("---\n"), f"{p}: no frontmatter"
+    return yaml.safe_load(t.split("\n---\n", 1)[0][4:])
+for p in sorted(root.glob("skills/*/SKILL.md")):
+    d = fm(p)
+    if d.get("name") != p.parent.name: errs.append(f"{p}: name != dir")
+    if not d.get("description") or len(d["description"]) > 1024: errs.append(f"{p}: description missing or > 1024")
+for p in sorted(root.glob("agents/*.md")):
+    d = fm(p)
+    if d.get("name") != p.stem: errs.append(f"{p}: name != file")
+    if "<example>" not in str(d.get("description", "")): errs.append(f"{p}: no <example> in description")
+    if d.get("model") not in {"inherit", "sonnet", "opus", "haiku"}: errs.append(f"{p}: bad model")
+    if not d.get("tools"): errs.append(f"{p}: no tools allowlist")
+for p in sorted(root.glob("skills/shipping-like-claude-code-team/templates/commands/*.md")):
+    if not fm(p).get("description"): errs.append(f"{p}: no description")
+if errs: sys.exit("\n".join(errs))
+PY
+fi
+for e in "$PLUGIN"/evals/*/; do
+  [[ "$(basename "$e")" == results ]] && continue   # local `claude plugin eval` output, gitignored
+  [[ -f "$e/prompt.md" ]] && compgen -G "$e/graders/*.md" >/dev/null && ok "eval $(basename "$e")" || bad "eval $(basename "$e") incomplete"
+done
 missing=""
-for ref in $(grep -oE '`(references|templates)/[^`]+`' "$SKILL/SKILL.md" | tr -d '`' | sed 's/ .*//' | sort -u); do
+for ref in $(grep -ohE '`(references|templates)/[^`]+`' "$SKILL/SKILL.md" | tr -d '`' | sed 's/ .*//' | sort -u); do
   [[ -e "$SKILL/$ref" ]] || missing="$missing $ref"
 done
-[[ -z "$missing" ]] && ok "SKILL.md links resolve" || bad "broken links:$missing"
-for c in "$PLUGIN"/commands/*.md "$T"/commands/*.md; do
-  head -1 "$c" | grep -q '^---$' && grep -q '^description:' "$c" || bad "frontmatter: ${c#$ROOT/}"
+for s in "$PLUGIN"/skills/*/SKILL.md; do
+  grep -q 'CONNECTORS.md' "$s" && [[ ! -f "$PLUGIN/CONNECTORS.md" ]] && missing="$missing CONNECTORS.md"
 done
-ok "command frontmatter"
+[[ -z "$missing" ]] && ok "links resolve" || bad "broken links:$missing"
+for s in "$PLUGIN"/skills/*/SKILL.md "$PLUGIN"/agents/*.md; do
+  grep -ohE '`(code-explorer|code-architect|bug-hunter|rule-checker|finding-validator|silent-failure-hunter)`' "$s"
+done | tr -d '`' | sort -u | while read -r a; do [[ -f "$PLUGIN/agents/$a.md" ]] || echo "missing agent $a"; done > "$WORK/agentrefs"
+[[ ! -s "$WORK/agentrefs" ]] && ok "agent references resolve" || bad "$(cat "$WORK/agentrefs")"
+
+echo "safety (what the plugin ships)"
+[[ ! -e "$PLUGIN/hooks" && ! -e "$PLUGIN/.claude-plugin/hooks.json" ]] && ok "no hooks" || bad "plugin registers hooks: update README safety section"
+[[ ! -e "$PLUGIN/.mcp.json" ]] && ok "no MCP servers" || bad "plugin ships MCP servers: update README safety section"
+net=$(grep -rnE '\b(curl|wget|nc|Invoke-WebRequest|urllib|requests\.|fetch\()' "$PLUGIN" --include='*.sh' --include='*.py' --include='*.ts' --include='*.js' || true)
+[[ -z "$net" ]] && ok "shipped scripts make no direct network calls (gh only)" || bad "network call in shipped code" "$net"
+secrets=$(grep -rnE '(ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|security find-|\.aws/credentials|id_rsa)' "$PLUGIN" --include='*.sh' --include='*.py' || true)
+[[ -z "$secrets" ]] && ok "shipped scripts read no credentials" || bad "credential access in shipped code" "$secrets"
 
 echo
 echo "$pass passed, $fail failed"
