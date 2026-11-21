@@ -1,0 +1,18 @@
+# Runs the enforcement check. Plain runner, read-only, no sign-in. Make it a required status check.
+name: Security check for workflows that call Claude
+on:
+  pull_request:
+    paths: [".github/**", "CLAUDE.md", "scripts/check_workflow_hardening.py"]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: pip install pyyaml
+      - run: python3 scripts/check_workflow_hardening.py .

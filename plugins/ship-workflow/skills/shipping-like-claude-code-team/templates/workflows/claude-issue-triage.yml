@@ -1,0 +1,79 @@
+# Issue triage + dedupe with every hardening layer from references/ci-agents.md.
+# Replace: runner label (if your org has a different firewall runner), vars.* auth names, model id.
+name: Claude issue triage
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  triage:
+    if: >-
+      github.event_name == 'issues' ||
+      (github.event_name == 'issue_comment' && !github.event.issue.pull_request && github.event.comment.user.type != 'Bot')
+    runs-on: ubuntu-24.04-firewall          # layer 1: egress filtered by .github/egress-firewall.yaml
+    timeout-minutes: 10                     # layer 10
+    concurrency:
+      group: issue-triage-${{ github.event.issue.number }}
+      cancel-in-progress: true
+    permissions:                            # layer 9
+      contents: read
+      issues: write
+      id-token: write                       # OIDC for layer 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: anthropics/claude-code-action@v1
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          CLAUDE_CODE_SCRIPT_CAPS: '{"edit-issue-labels.sh":2}'   # layer 7
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_non_write_users: "*"     # only safe because tools are narrowed to wrapper scripts
+          prompt: "/triage-issue REPO: ${{ github.repository }} ISSUE_NUMBER: ${{ github.event.issue.number }} EVENT: ${{ github.event_name }}"
+          # layer 2: short-lived token via workload identity federation, no static key
+          anthropic_federation_rule_id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          anthropic_organization_id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          anthropic_service_account_id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          anthropic_workspace_id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+          # layers 3, 4, 12. Pin the model; say why in a comment if you pick a smaller one.
+          claude_args: |
+            --permission-mode auto
+            --disallowedTools "WebFetch,WebSearch,Write,Edit,MultiEdit,NotebookEdit"
+            --model claude-sonnet-5-5
+
+  dedupe:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-24.04-firewall
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          CLAUDE_CODE_SCRIPT_CAPS: '{"comment-on-duplicates.sh":1}'
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_non_write_users: "*"
+          prompt: "/dedupe ${{ github.repository }}/issues/${{ github.event.issue.number }}"
+          anthropic_federation_rule_id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          anthropic_organization_id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          anthropic_service_account_id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          anthropic_workspace_id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+          claude_args: '--model claude-sonnet-5-5 --permission-mode auto --disallowedTools "WebFetch,WebSearch,Write,Edit,MultiEdit,NotebookEdit"'
+      # layer 15: log an event per automated action here (e.g. Statsig, your analytics), with `if: always()`.
+
+# layer 13: closing happens in a separate scheduled job running a plain script (no LLM) that
+# closes only issues whose duplicate comment is older than the grace period and has no 👎 or
+# later human comment, and never issues above an upvote threshold.

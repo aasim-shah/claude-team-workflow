@@ -1,0 +1,29 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Shellcheck
+        run: shellcheck -S warning install.sh tests/run.sh plugins/ship-workflow/scripts/*.sh plugins/ship-workflow/skills/*/templates/scripts/*.sh
+      - name: Python deps
+        run: pip install pyyaml
+      - name: Test suite
+        run: bash tests/run.sh
+      - name: Validate plugin and marketplace
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude plugin validate .
+          claude plugin validate plugins/ship-workflow

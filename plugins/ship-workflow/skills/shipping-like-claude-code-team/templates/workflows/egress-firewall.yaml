@@ -1,0 +1,18 @@
+# Hosts that jobs on the egress-firewall runner may reach; everything else is blocked.
+# Add a host only when a step needs it, name it in full (no '*'), and say what uses it.
+mode: enforce
+allow:
+  # Claude API: model calls and OIDC token exchange
+  - api.anthropic.com
+  # GitHub API: the Claude action and the scripts/ wrappers (gh)
+  - api.github.com
+  # Claude Code install script and binary, fetched by the action
+  - claude.ai
+  - downloads.claude.ai
+  # Bun download and npm packages used by the action
+  - release-assets.githubusercontent.com
+  - registry.npmjs.org
+  # apt packages (bubblewrap, socat) the action installs when non-write users can trigger it
+  - archive.ubuntu.com
+  - security.ubuntu.com
+  - azure.archive.ubuntu.com
